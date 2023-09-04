@@ -1,0 +1,10 @@
+aiohttp
+aioschedule
+aiosqlite
+asyncpg
+black
+fastapi[all]
+mypy
+pip-tools
+ruff
+tqdm
