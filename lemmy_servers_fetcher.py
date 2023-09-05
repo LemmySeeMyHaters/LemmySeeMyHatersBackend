@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncio
+from csv import DictReader
+import re
 import time
 
 import aiohttp
@@ -9,8 +11,10 @@ import aioschedule as schedule
 import aiosqlite
 from tqdm import tqdm
 
+markdown_url_pattren = re.compile(r"\[.*?\]\((.*?)\)")
 
-async def save_to_database(communities: dict[str, dict[object, object]]) -> None:
+
+async def save_to_database(communities: DictReader[str]) -> None:
     """
     Save a list of communities to an SQLite database.
 
@@ -29,9 +33,13 @@ async def save_to_database(communities: dict[str, dict[object, object]]) -> None
         await db_conn.commit()
         communities_pbar = tqdm(communities)
         for community in communities_pbar:
-            url = community.get("url", "lemmystats.lol")
-            communities_pbar.set_description(f"Adding URL: {url}")
-            await db_conn.execute("INSERT OR IGNORE INTO lemmy_instances (url) VALUES (?)", (url,))
+            markdown_text = community.get("Instance", "lemmystats.lol")
+            if result := markdown_url_pattren.search(markdown_text):
+                extracted_url = result.group(1).removeprefix("https://")
+            else:
+                extracted_url = "lemmystats.lol"
+            communities_pbar.set_description(f"Adding URL: {extracted_url}")
+            await db_conn.execute("INSERT OR IGNORE INTO lemmy_instances (url) VALUES (?)", (extracted_url,))
         await db_conn.commit()
 
 
@@ -44,12 +52,10 @@ async def update_server_db() -> None:
     :return: None
     """
     async with aiohttp.ClientSession() as session:
-        async with session.get("https://browse.feddit.de/communities.json") as resp:
-            communities = await resp.json()
-            if resp.status == 200:
-                await save_to_database(communities)
-            else:
-                print(communities)
+        async with session.get("https://raw.githubusercontent.com/maltfield/awesome-lemmy-instances/main/awesome-lemmy-instances.csv") as resp:
+            raw_data = await resp.text()
+            communities = DictReader(raw_data.splitlines())
+            await save_to_database(communities)
 
 
 def main() -> None:
