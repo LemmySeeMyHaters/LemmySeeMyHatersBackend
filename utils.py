@@ -1,20 +1,15 @@
 from __future__ import annotations
 
-from enum import Enum
 from typing import TypeVar, Literal, Optional
 
 from asyncpg import Connection
 
+from data_models import VoteFilter, LemmyVote
+
 T = TypeVar("T")
 
 
-class VoteFilter(str, Enum):
-    ALL = "All"
-    UPVOTES = "Upvotes"
-    DOWNVOTES = "Downvotes"
-
-
-def paginate_data(all_votes: list[T], offset: int, limit: int) -> tuple[list[T], Optional[int]]:
+def paginate_data(all_votes: list[LemmyVote], offset: int, limit: int) -> tuple[list[LemmyVote], Optional[int]]:
     """Paginates a list of items based on offset and limit.
 
     :param all_votes: The list of items to paginate.
@@ -32,7 +27,7 @@ def paginate_data(all_votes: list[T], offset: int, limit: int) -> tuple[list[T],
     return paginated_data, next_offset
 
 
-async def get_votes_information(url: str, object_type: Literal["Post", "Comment"], votes_filter: VoteFilter, pg_conn: Connection) -> list[dict[str, int | str]]:
+async def get_votes_information(url: str, object_type: Literal["Post", "Comment"], votes_filter: VoteFilter, pg_conn: Connection) -> list[LemmyVote]:
     """Retrieve vote information for a post or comment.
 
     :param str url: The URL of the post or comment.
@@ -59,7 +54,6 @@ async def get_votes_information(url: str, object_type: Literal["Post", "Comment"
         if votes_filter != VoteFilter.ALL:
             query = f"{query} AND pl.score = {1 if votes_filter == VoteFilter.UPVOTES else -1}"
         result = await pg_conn.fetch(query, post_local_id)
-        return [dict(record) for record in result]
     else:
         rslt = await pg_conn.fetchrow("SELECT id FROM public.comment WHERE ap_id = $1", url)
         comment_local_id = rslt.get("id")
@@ -73,4 +67,6 @@ async def get_votes_information(url: str, object_type: Literal["Post", "Comment"
         if votes_filter != VoteFilter.ALL:
             query = f"{query} AND cl.score = {1 if votes_filter == VoteFilter.UPVOTES else -1}"
         result = await pg_conn.fetch(query, comment_local_id)
-        return [dict(record) for record in result]
+
+    all_votes: list[LemmyVote] = [LemmyVote(name=record["name"], score=record["score"], actor_id=record["actor_id"]) for record in result]
+    return all_votes

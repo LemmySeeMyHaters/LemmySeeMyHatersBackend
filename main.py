@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from os import getenv
+from typing import Optional
 from urllib.parse import unquote
 
 import asyncpg
@@ -9,12 +10,11 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 
 from lemmy_api import lemmy_auth, lemmy_search
-from utils import paginate_data, get_votes_information, VoteFilter
+from utils import paginate_data, get_votes_information
+from data_models import VoteFilter, VotesResponse
 
 load_dotenv()
 app = FastAPI()
-
-VotesResponse = dict[str, int | list[dict[str, int | str]] | None]
 
 
 @app.get("/votes/post", summary="Get votes information for a post")
@@ -22,6 +22,7 @@ async def post_votes(
     url: str = Query(..., description="URL of the post"),
     offset: int = Query(default=0, description="The offset from which to start paginating the data (0-based indexing)", ge=0),
     limit: int = Query(default=50, description="The maximum number of items to return per page", ge=1),
+    username: Optional[str] = Query(None, description="Username to filter by vote author"),
     votes_filter: VoteFilter = Query(VoteFilter.ALL, description="Vote filter option (All, Upvotes, Downvotes)"),
 ) -> VotesResponse:
     """Get votes for a post.
@@ -29,6 +30,7 @@ async def post_votes(
     :param str url: URL of the post.
     :param int offset: The offset from which to start paginating the data (0-based indexing).
     :param int limit: The maximum number of items to return per page.
+    :param Optional[str] username: Username to filter by vote author.
     :param VoteFilter votes_filter: Vote filter option (All, Upvotes, Downvotes).
 
     :returns: Paginated votes information.
@@ -44,6 +46,10 @@ async def post_votes(
         raise HTTPException(status_code=resp_status, detail=f"{post_data.get('error', 'External API Error')}. Make sure you are passing Activity Pub link.")
 
     all_votes = await get_votes_information(decoded_url, "Post", votes_filter, app.state.pg_conn)
+
+    if username is not None:
+        all_votes = [vote for vote in all_votes if vote.get("name", "").lower() == username.lower()]
+
     paginated_votes, next_offset = paginate_data(all_votes, offset, limit)
     return {"votes": paginated_votes, "total_count": len(all_votes), "next_offset": next_offset}
 
@@ -53,6 +59,7 @@ async def comment_votes(
     url: str = Query(..., description="URL of the comment"),
     offset: int = Query(default=0, description="The offset from which to start paginating the data (0-based indexing)", ge=0),
     limit: int = Query(default=50, description="The maximum number of items to return per page", ge=1),
+    username: Optional[str] = Query(None, description="Username to filter by vote author"),
     votes_filter: VoteFilter = Query(VoteFilter.ALL, description="Vote filter option (All, Upvotes, Downvotes)"),
 ) -> VotesResponse:
     """Get votes for a comment.
@@ -60,6 +67,7 @@ async def comment_votes(
     :param str url: URL of the comment.
     :param int offset: The offset from which to start paginating the data (0-based indexing).
     :param int limit: The maximum number of items to return per page.
+    :param Optional[str] username: Username to filter by vote autho
     :param VoteFilter votes_filter: Vote filter option (All, Upvotes, Downvotes).
 
     :returns: Paginated votes information.
