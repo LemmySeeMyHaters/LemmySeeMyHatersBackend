@@ -21,7 +21,7 @@ app = FastAPI()
 async def post_votes(
     url: str = Query(..., description="URL of the post"),
     offset: int = Query(default=0, description="The offset from which to start paginating the data (0-based indexing)", ge=0),
-    limit: int = Query(default=50, description="The maximum number of items to return per page", ge=1),
+    limit: int = Query(default=50, description="The maximum number of items to return per page", ge=1, le=251),
     username: Optional[str] = Query(None, description="Username to filter by vote author"),
     votes_filter: VoteFilter = Query(VoteFilter.ALL, description="Vote filter option (All, Upvotes, Downvotes)"),
 ) -> VotesResponse:
@@ -58,7 +58,7 @@ async def post_votes(
 async def comment_votes(
     url: str = Query(..., description="URL of the comment"),
     offset: int = Query(default=0, description="The offset from which to start paginating the data (0-based indexing)", ge=0),
-    limit: int = Query(default=50, description="The maximum number of items to return per page", ge=1),
+    limit: int = Query(default=50, description="The maximum number of items to return per page", ge=1, le=251),
     username: Optional[str] = Query(None, description="Username to filter by vote author"),
     votes_filter: VoteFilter = Query(VoteFilter.ALL, description="Vote filter option (All, Upvotes, Downvotes)"),
 ) -> VotesResponse:

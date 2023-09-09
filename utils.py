@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import TypeVar, Literal, Optional
 
-from asyncpg import Connection
+from async_lru import alru_cache
+from asyncpg import Connection, Record
+from fastapi import HTTPException
+from typing_extensions import LiteralString
 
 from data_models import VoteFilter, LemmyVote
 
@@ -27,6 +30,26 @@ def paginate_data(all_votes: list[LemmyVote], offset: int, limit: int) -> tuple[
     return paginated_data, next_offset
 
 
+@alru_cache(ttl=180, maxsize=256)
+async def get_local_id_from_ap_id(url: str, object_type: Literal["Post", "Comment"], pg_conn: Connection) -> int:
+    if object_type == "Post":
+        rslt = await pg_conn.fetchrow("SELECT id FROM public.post WHERE ap_id = $1", url)
+    else:
+        rslt = await pg_conn.fetchrow("SELECT id FROM public.comment WHERE ap_id = $1", url)
+
+    local_id: int = rslt.get("id")
+    if local_id is None:
+        raise HTTPException(status_code=404, detail="Could not fetch the object from the URL.")
+    else:
+        return local_id
+
+
+@alru_cache(ttl=60, maxsize=256)
+async def get_scores_from_pg(query: LiteralString, object_id_local: int, pg_conn: Connection) -> list[Record]:
+    rec: list[Record] = await pg_conn.fetch(query, object_id_local)
+    return rec
+
+
 async def get_votes_information(url: str, object_type: Literal["Post", "Comment"], votes_filter: VoteFilter, pg_conn: Connection) -> list[LemmyVote]:
     """Retrieve vote information for a post or comment.
 
@@ -41,10 +64,8 @@ async def get_votes_information(url: str, object_type: Literal["Post", "Comment"
         are returned. If 'votes_filter' is 'VoteFilter.DOWNVOTES', only downvotes are returned.
 
     """
-    if object_type == "Post":
-        rslt = await pg_conn.fetchrow("SELECT id FROM public.post WHERE ap_id = $1", url)
-        post_local_id = rslt.get("id")
 
+    if object_type == "Post":
         query = """
             SELECT pe.name, pl.score, pe.actor_id
             FROM public.post_like pl
@@ -53,11 +74,7 @@ async def get_votes_information(url: str, object_type: Literal["Post", "Comment"
             """
         if votes_filter != VoteFilter.ALL:
             query = f"{query} AND pl.score = {1 if votes_filter == VoteFilter.UPVOTES else -1}"
-        result = await pg_conn.fetch(query, post_local_id)
     else:
-        rslt = await pg_conn.fetchrow("SELECT id FROM public.comment WHERE ap_id = $1", url)
-        comment_local_id = rslt.get("id")
-
         query = """
             SELECT pe.name, cl.score, pe.actor_id
             FROM public.comment_like cl
@@ -66,7 +83,8 @@ async def get_votes_information(url: str, object_type: Literal["Post", "Comment"
             """
         if votes_filter != VoteFilter.ALL:
             query = f"{query} AND cl.score = {1 if votes_filter == VoteFilter.UPVOTES else -1}"
-        result = await pg_conn.fetch(query, comment_local_id)
 
+    object_local_id = await get_local_id_from_ap_id(url, object_type, pg_conn)
+    result = await get_scores_from_pg(query, object_local_id, pg_conn)
     all_votes: list[LemmyVote] = [LemmyVote(name=record["name"], score=record["score"], actor_id=record["actor_id"]) for record in result]
     return all_votes
