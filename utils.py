@@ -52,10 +52,10 @@ async def get_local_id_from_ap_id(url: str, object_type: Literal["Post", "Commen
     else:
         rslt = await pg_conn.fetchrow("SELECT id FROM public.comment WHERE ap_id = $1", url)
 
-    local_id: int = rslt.get("id")
-    if local_id is None:
+    if rslt is None:
         raise HTTPException(status_code=404, detail="Could not fetch the object from the URL.")
     else:
+        local_id: int = rslt.get("id")
         return local_id
 
 
