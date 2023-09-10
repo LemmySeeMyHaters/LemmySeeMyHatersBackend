@@ -9,9 +9,9 @@ from aiohttp import ClientSession
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 
+from data_models import VoteFilter, VotesResponse
 from lemmy_api import lemmy_auth, lemmy_search
 from utils import paginate_data, get_votes_information
-from data_models import VoteFilter, VotesResponse
 
 load_dotenv()
 app = FastAPI()
@@ -45,11 +45,7 @@ async def post_votes(
     if resp_status != 200:
         raise HTTPException(status_code=resp_status, detail=f"{post_data.get('error', 'External API Error')}. Make sure you are passing Activity Pub link.")
 
-    all_votes = await get_votes_information(decoded_url, "Post", votes_filter, app.state.pg_conn)
-
-    if username is not None:
-        all_votes = [vote for vote in all_votes if vote.get("name", "").lower() == username.lower()]
-
+    all_votes = await get_votes_information(decoded_url, "Post", votes_filter, username, app.state.pg_conn)
     paginated_votes, next_offset = paginate_data(all_votes, offset, limit)
     return {"votes": paginated_votes, "total_count": len(all_votes), "next_offset": next_offset}
 
@@ -67,7 +63,7 @@ async def comment_votes(
     :param str url: URL of the comment.
     :param int offset: The offset from which to start paginating the data (0-based indexing).
     :param int limit: The maximum number of items to return per page.
-    :param Optional[str] username: Username to filter by vote autho
+    :param Optional[str] username: Username to filter by vote author.
     :param VoteFilter votes_filter: Vote filter option (All, Upvotes, Downvotes).
 
     :returns: Paginated votes information.
@@ -82,7 +78,7 @@ async def comment_votes(
     if resp_status != 200:
         raise HTTPException(status_code=resp_status, detail=f"{comment_data.get('error', 'External API Error')}. Make sure you are passing Activity Pub link.")
 
-    all_votes = await get_votes_information(decoded_url, "Comment", votes_filter, app.state.pg_conn)
+    all_votes = await get_votes_information(decoded_url, "Comment", votes_filter, username, app.state.pg_conn)
     paginated_votes, next_offset = paginate_data(all_votes, offset, limit)
     return {"votes": paginated_votes, "total_count": len(all_votes), "next_offset": next_offset}
 
