@@ -125,7 +125,7 @@ async def get_votes_information(
             query = f"{query} AND cl.score = {1 if votes_filter == VoteFilter.UPVOTES else -1}"
 
     if username is not None:
-        query = f"{query} and pe.name = $2"
+        query = f"{query} AND pe.name = $2"
 
     object_local_id = await get_local_id_from_ap_id(url, object_type, pg_conn)
     result = await get_scores_from_pg(query, object_local_id, username, pg_conn)
