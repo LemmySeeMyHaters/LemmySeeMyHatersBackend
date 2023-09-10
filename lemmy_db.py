@@ -1,15 +1,32 @@
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime
+from os import getenv
 from typing import TypeVar, Literal, Optional
 
+import asyncpg
 from async_lru import alru_cache
 from asyncpg import Connection, Record
 from fastapi import HTTPException
 from typing_extensions import LiteralString
 
-from data_models import VoteFilter, LemmyVote
+from data_models import VoteFilter, LemmyVote, LemmyObjectAggregate
 
 T = TypeVar("T")
+
+
+def get_unix_timestamp(published_datetime: datetime) -> float:
+    """
+    Converts a datetime object to a Unix timestamp.
+
+    :param published_datetime: Python datetime object.
+    :type published_datetime: datetime
+    :return: The Unix timestamp representing the provided ISO 8601 date and time.
+    :rtype: float
+
+    """
+    return published_datetime.timestamp()
 
 
 def paginate_data(all_votes: list[LemmyVote], offset: int, limit: int) -> tuple[list[LemmyVote], Optional[int]]:
@@ -59,6 +76,16 @@ async def get_local_id_from_ap_id(url: str, object_type: Literal["Post", "Commen
         return local_id
 
 
+@alru_cache(ttl=180, maxsize=256)
+async def get_aggregates_from_pg(query: LiteralString, object_local_id: int) -> LemmyObjectAggregate:
+    # Needs a new connection because it runs concurrently
+    pg_conn = await asyncpg.connect(
+        database=getenv("DB_USER"), user=getenv("DB_USER"), password=getenv("DB_PASSWORD"), host="localhost", port=getenv("DB_PORT")
+    )
+    rec: Record = await pg_conn.fetchrow(query, object_local_id)
+    return LemmyObjectAggregate(*rec)
+
+
 @alru_cache(ttl=60, maxsize=256)
 async def get_scores_from_pg(query: LiteralString, object_local_id: int, username: Optional[str], pg_conn: Connection) -> list[Record]:
     """
@@ -89,7 +116,7 @@ async def get_scores_from_pg(query: LiteralString, object_local_id: int, usernam
 
 async def get_votes_information(
     url: str, object_type: Literal["Post", "Comment"], votes_filter: VoteFilter, username: Optional[str], pg_conn: Connection
-) -> list[LemmyVote]:
+) -> tuple[LemmyObjectAggregate, list[LemmyVote]]:
     """Retrieve vote information for a post or comment.
 
     :param str url: The URL of the post or comment.
@@ -106,28 +133,43 @@ async def get_votes_information(
     """
 
     if object_type == "Post":
-        query = """
-            SELECT pe.name, pl.score, pe.actor_id
+        votes_query = """
+            SELECT pe.name, pl.score, pe.actor_id, pl.published
             FROM public.post_like pl
             JOIN public.person pe ON pl.person_id = pe.id
             WHERE pl.post_id = $1
             """
         if votes_filter != VoteFilter.ALL:
-            query = f"{query} AND pl.score = {1 if votes_filter == VoteFilter.UPVOTES else -1}"
+            votes_query = f"{votes_query} AND pl.score = {1 if votes_filter == VoteFilter.UPVOTES else -1}"
+
+        agg_query = """
+        SELECT post_agg.score, post_agg.upvotes, post_agg.downvotes 
+        FROM public.post_aggregates post_agg 
+        WHERE post_agg.post_id = $1
+        """
     else:
-        query = """
-            SELECT pe.name, cl.score, pe.actor_id
+        votes_query = """
+            SELECT pe.name, cl.score, pe.actor_id, cl.published
             FROM public.comment_like cl
             JOIN public.person pe ON cl.person_id = pe.id
             WHERE cl.comment_id = $1
             """
         if votes_filter != VoteFilter.ALL:
-            query = f"{query} AND cl.score = {1 if votes_filter == VoteFilter.UPVOTES else -1}"
+            votes_query = f"{votes_query} AND cl.score = {1 if votes_filter == VoteFilter.UPVOTES else -1}"
+
+        agg_query = """
+        SELECT comment_agg.score, comment_agg.upvotes, comment_agg.downvotes 
+        FROM public.comment_aggregates comment_agg 
+        WHERE comment_agg.comment_id = $1
+        """
 
     if username is not None:
-        query = f"{query} AND pe.name = $2"
+        votes_query = f"{votes_query} AND pe.name = $2"
 
     object_local_id = await get_local_id_from_ap_id(url, object_type, pg_conn)
-    result = await get_scores_from_pg(query, object_local_id, username, pg_conn)
-    all_votes: list[LemmyVote] = [LemmyVote(name=record["name"], score=record["score"], actor_id=record["actor_id"]) for record in result]
-    return all_votes
+    result = await asyncio.gather(get_aggregates_from_pg(agg_query, object_local_id), get_scores_from_pg(votes_query, object_local_id, username, pg_conn))
+    all_votes: list[LemmyVote] = [
+        LemmyVote(name=record["name"], score=record["score"], actor_id=record["actor_id"], created_utc=get_unix_timestamp(record["published"]))
+        for record in result[1]
+    ]
+    return result[0], all_votes

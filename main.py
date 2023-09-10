@@ -7,14 +7,20 @@ import asyncpg
 from aiohttp import ClientSession
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import RedirectResponse
 from pydantic import HttpUrl
 
 from data_models import VoteFilter, VotesResponse
 from lemmy_api import lemmy_auth, lemmy_search
-from utils import paginate_data, get_votes_information
+from lemmy_db import paginate_data, get_votes_information
 
 load_dotenv()
 app = FastAPI()
+
+
+@app.get("/")
+async def redirect_to_docs() -> RedirectResponse:
+    return RedirectResponse("/docs")
 
 
 @app.get("/votes/post", summary="Get votes information for a post")
@@ -45,12 +51,19 @@ async def post_votes(
     if resp_status != 200:
         raise HTTPException(status_code=resp_status, detail=f"{post_data.get('error', 'External API Error')}. Make sure you are passing Activity Pub link.")
 
-    all_votes = await get_votes_information(decoded_url, "Post", votes_filter, username, app.state.pg_conn)
+    obj_agg, all_votes = await get_votes_information(decoded_url, "Post", votes_filter, username, app.state.pg_conn)
     paginated_votes, next_offset = paginate_data(all_votes, offset, limit)
-    return {"votes": paginated_votes, "total_count": len(all_votes), "next_offset": next_offset}
+    return VotesResponse(
+        votes=paginated_votes,
+        total_count=len(all_votes),
+        next_offset=next_offset,
+        total_score=obj_agg.total_score,
+        upvotes=obj_agg.upvotes,
+        downvotes=obj_agg.downvotes,
+    )
 
 
-@app.get("/votes/comment")
+@app.get("/votes/comment", summary="Get votes information for a comment")
 async def comment_votes(
     url: HttpUrl = Query(..., description="URL of the comment"),
     offset: int = Query(default=0, description="The offset from which to start paginating the data (0-based indexing)", ge=0),
@@ -78,9 +91,16 @@ async def comment_votes(
     if resp_status != 200:
         raise HTTPException(status_code=resp_status, detail=f"{comment_data.get('error', 'External API Error')}. Make sure you are passing Activity Pub link.")
 
-    all_votes = await get_votes_information(decoded_url, "Comment", votes_filter, username, app.state.pg_conn)
+    obj_agg, all_votes = await get_votes_information(decoded_url, "Comment", votes_filter, username, app.state.pg_conn)
     paginated_votes, next_offset = paginate_data(all_votes, offset, limit)
-    return {"votes": paginated_votes, "total_count": len(all_votes), "next_offset": next_offset}
+    return VotesResponse(
+        votes=paginated_votes,
+        total_count=len(all_votes),
+        next_offset=next_offset,
+        total_score=obj_agg.total_score,
+        upvotes=obj_agg.upvotes,
+        downvotes=obj_agg.downvotes,
+    )
 
 
 @app.on_event("startup")
