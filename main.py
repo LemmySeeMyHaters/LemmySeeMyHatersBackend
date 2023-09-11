@@ -20,7 +20,7 @@ app = FastAPI()
 
 @app.get("/")
 async def redirect_to_docs() -> RedirectResponse:
-    return RedirectResponse(f"0.0.0.0:{getenv('LEMMY_SEE_MY_HATERS_PORT', 8000)}/docs")
+    return RedirectResponse("/docs")
 
 
 @app.get("/votes/post", summary="Get votes information for a post")
