@@ -172,7 +172,7 @@ async def get_votes_information(
     votes_query += order_by_clause
 
     if username is not None:
-        votes_query += f" AND pe.name = $2"
+        votes_query += " AND pe.name = $2"
 
     object_local_id = await get_local_id_from_ap_id(url, object_type, pg_conn)
     result = await asyncio.gather(get_aggregates_from_pg(agg_query, object_local_id), get_scores_from_pg(votes_query, object_local_id, username, pg_conn))
