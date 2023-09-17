@@ -26,6 +26,11 @@ class VoteFilter(str, Enum):
     DOWNVOTES = "Downvotes"
 
 
+class SortOption(str, Enum):
+    DATETIME_ASC = "datetime_asc"
+    DATETIME_DESC = "datetime_desc"
+
+
 class LemmyObjectAggregate(NamedTuple):
     total_score: int
     upvotes: int

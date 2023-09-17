@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import HttpUrl
 
-from data_models import VoteFilter, VotesResponse
+from data_models import VoteFilter, VotesResponse, SortOption
 from lemmy_api import lemmy_auth, lemmy_search
 from lemmy_db import paginate_data, get_votes_information
 
@@ -28,16 +28,18 @@ async def post_votes(
     url: HttpUrl = Query(..., description="URL of the post"),
     offset: int = Query(default=0, description="The offset from which to start paginating the data (0-based indexing)", ge=0),
     limit: int = Query(default=50, description="The maximum number of items to return per page", ge=1, le=251),
-    username: Optional[str] = Query(None, description="Username to filter by vote author"),
     votes_filter: VoteFilter = Query(VoteFilter.ALL, description="Vote filter option (All, Upvotes, Downvotes)"),
+    sort_by: SortOption = Query(SortOption.DATETIME_DESC, description="Sort option (datetime_asc, datetime_desc)"),
+    username: Optional[str] = Query(None, description="Username to filter by vote author"),
 ) -> VotesResponse:
     """Get votes for a post.
 
     :param str url: URL of the post.
     :param int offset: The offset from which to start paginating the data (0-based indexing).
     :param int limit: The maximum number of items to return per page.
-    :param Optional[str] username: Username to filter by vote author.
     :param VoteFilter votes_filter: Vote filter option (All, Upvotes, Downvotes).
+    :param SortOption sort_by: Vote Sort Option (datetime_asc, datetime_desc).
+    :param Optional[str] username: Username to filter by vote author.
 
     :returns: Paginated votes information.
     :rtype: VotesResponse
@@ -51,7 +53,7 @@ async def post_votes(
     if resp_status != 200:
         raise HTTPException(status_code=resp_status, detail=f"{post_data.get('error', 'External API Error')}. Make sure you are passing Activity Pub link.")
 
-    obj_agg, all_votes = await get_votes_information(decoded_url, "Post", votes_filter, username, app.state.pg_conn)
+    obj_agg, all_votes = await get_votes_information(decoded_url, "Post", votes_filter, sort_by, username, app.state.pg_conn)
     paginated_votes, next_offset = paginate_data(all_votes, offset, limit)
     return VotesResponse(
         votes=paginated_votes,
@@ -68,16 +70,18 @@ async def comment_votes(
     url: HttpUrl = Query(..., description="URL of the comment"),
     offset: int = Query(default=0, description="The offset from which to start paginating the data (0-based indexing)", ge=0),
     limit: int = Query(default=50, description="The maximum number of items to return per page", ge=1, le=251),
-    username: Optional[str] = Query(None, description="Username to filter by vote author"),
     votes_filter: VoteFilter = Query(VoteFilter.ALL, description="Vote filter option (All, Upvotes, Downvotes)"),
+    sort_by: SortOption = Query(SortOption.DATETIME_DESC, description="Sort option (datetime_asc, datetime_desc)"),
+    username: Optional[str] = Query(None, description="Username to filter by vote author"),
 ) -> VotesResponse:
     """Get votes for a comment.
 
     :param str url: URL of the comment.
     :param int offset: The offset from which to start paginating the data (0-based indexing).
     :param int limit: The maximum number of items to return per page.
-    :param Optional[str] username: Username to filter by vote author.
     :param VoteFilter votes_filter: Vote filter option (All, Upvotes, Downvotes).
+    :param SortOption sort_by: Vote Sort Option (datetime_asc, datetime_desc).
+    :param Optional[str] username: Username to filter by vote author.
 
     :returns: Paginated votes information.
     :rtype: VotesResponse
@@ -91,7 +95,7 @@ async def comment_votes(
     if resp_status != 200:
         raise HTTPException(status_code=resp_status, detail=f"{comment_data.get('error', 'External API Error')}. Make sure you are passing Activity Pub link.")
 
-    obj_agg, all_votes = await get_votes_information(decoded_url, "Comment", votes_filter, username, app.state.pg_conn)
+    obj_agg, all_votes = await get_votes_information(decoded_url, "Comment", votes_filter, sort_by, username, app.state.pg_conn)
     paginated_votes, next_offset = paginate_data(all_votes, offset, limit)
     return VotesResponse(
         votes=paginated_votes,

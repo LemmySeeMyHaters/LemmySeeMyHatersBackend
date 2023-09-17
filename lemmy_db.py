@@ -11,7 +11,7 @@ from asyncpg import Connection, Record
 from fastapi import HTTPException
 from typing_extensions import LiteralString
 
-from data_models import VoteFilter, LemmyVote, LemmyObjectAggregate
+from data_models import VoteFilter, LemmyVote, LemmyObjectAggregate, SortOption
 
 T = TypeVar("T")
 
@@ -115,13 +115,14 @@ async def get_scores_from_pg(query: LiteralString, object_local_id: int, usernam
 
 
 async def get_votes_information(
-    url: str, object_type: Literal["Post", "Comment"], votes_filter: VoteFilter, username: Optional[str], pg_conn: Connection
+    url: str, object_type: Literal["Post", "Comment"], votes_filter: VoteFilter, sort_by: SortOption, username: Optional[str], pg_conn: Connection
 ) -> tuple[LemmyObjectAggregate, list[LemmyVote]]:
     """Retrieve vote information for a post or comment.
 
     :param str url: The URL of the post or comment.
     :param Literal["Post", "Comment"] object_type: The type of object to retrieve votes for (Post or Comment).
     :param VoteFilter votes_filter: The vote filter option (All, Upvotes, Downvotes).
+    :param SortOption sort_by: Vote Sort Option (datetime_asc, datetime_desc).
     :param Optional[str] username: Username to filter by vote author.
     :param Connection pg_conn: The PostgreSQL database connection.
 
@@ -132,39 +133,46 @@ async def get_votes_information(
 
     """
 
+    votes_query = """
+        SELECT pe.name, content_likes.score, pe.actor_id, content_likes.published
+        FROM public.{like_table} content_likes
+        JOIN public.person pe ON content_likes.person_id = pe.id
+        WHERE content_likes.{id_col} = $1
+    """
+
+    agg_query = """
+        SELECT content_agg.score, content_agg.upvotes, content_agg.downvotes 
+        FROM public.{agg_table} content_agg 
+        WHERE content_agg.{id_col} = $1
+        """
+
     if object_type == "Post":
-        votes_query = """
-            SELECT pe.name, pl.score, pe.actor_id, pl.published
-            FROM public.post_like pl
-            JOIN public.person pe ON pl.person_id = pe.id
-            WHERE pl.post_id = $1
-            """
-        if votes_filter != VoteFilter.ALL:
-            votes_query = f"{votes_query} AND pl.score = {1 if votes_filter == VoteFilter.UPVOTES else -1}"
-
-        agg_query = """
-        SELECT post_agg.score, post_agg.upvotes, post_agg.downvotes 
-        FROM public.post_aggregates post_agg 
-        WHERE post_agg.post_id = $1
-        """
+        like_table = "post_like"
+        agg_table = "post_aggregates"
+        id_col = "post_id"
     else:
-        votes_query = """
-            SELECT pe.name, cl.score, pe.actor_id, cl.published
-            FROM public.comment_like cl
-            JOIN public.person pe ON cl.person_id = pe.id
-            WHERE cl.comment_id = $1
-            """
-        if votes_filter != VoteFilter.ALL:
-            votes_query = f"{votes_query} AND cl.score = {1 if votes_filter == VoteFilter.UPVOTES else -1}"
+        like_table = "comment_like"
+        agg_table = "comment_aggregates"
+        id_col = "comment_id"
 
-        agg_query = """
-        SELECT comment_agg.score, comment_agg.upvotes, comment_agg.downvotes 
-        FROM public.comment_aggregates comment_agg 
-        WHERE comment_agg.comment_id = $1
-        """
+    votes_query = votes_query.format(
+        like_table=like_table,
+        id_col=id_col,
+    )
+
+    agg_query = agg_query.format(
+        agg_table=agg_table,
+        id_col=id_col,
+    )
+
+    if votes_filter != VoteFilter.ALL:
+        votes_query += f" AND {1 if votes_filter == VoteFilter.UPVOTES else -1} = content_likes.score"
+
+    order_by_clause = f" ORDER BY content_likes.published {'ASC' if sort_by == SortOption.DATETIME_ASC else 'DESC'}"
+    votes_query += order_by_clause
 
     if username is not None:
-        votes_query = f"{votes_query} AND pe.name = $2"
+        votes_query += f" AND pe.name = $2"
 
     object_local_id = await get_local_id_from_ap_id(url, object_type, pg_conn)
     result = await asyncio.gather(get_aggregates_from_pg(agg_query, object_local_id), get_scores_from_pg(votes_query, object_local_id, username, pg_conn))
