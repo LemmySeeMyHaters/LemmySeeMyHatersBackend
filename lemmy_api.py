@@ -17,7 +17,7 @@ async def lemmy_auth(aio_session: ClientSession) -> None:
 
     """
     auth = {"password": getenv("LEMMY_PASSWORD"), "totp_2fa_token": None, "username_or_email": getenv("LEMMY_USERNAME")}
-    async with aio_session.post("https://lemmystats.lol/api/v3/user/login", json=auth) as resp:
+    async with aio_session.post("http://localhost:24455/api/v3/user/login", json=auth) as resp:
         data = await resp.json()
         aio_session.headers["auth"] = data.get("jwt")
 
