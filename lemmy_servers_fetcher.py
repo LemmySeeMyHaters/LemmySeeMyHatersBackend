@@ -33,11 +33,11 @@ async def save_to_database(communities: DictReader[str]) -> None:
         await db_conn.commit()
         communities_pbar = tqdm(communities)
         for community in communities_pbar:
-            markdown_text = community.get("Instance", "lemmystats.lol")
+            markdown_text = community.get("Instance", "lemmykekw.xyz")
             if result := markdown_url_pattren.search(markdown_text):
                 extracted_url = result.group(1).removeprefix("https://")
             else:
-                extracted_url = "lemmystats.lol"
+                extracted_url = "lemmykekw.xyz"
             communities_pbar.set_description(f"Adding URL: {extracted_url}")
             await db_conn.execute("INSERT OR IGNORE INTO lemmy_instances (url) VALUES (?)", (extracted_url,))
         await db_conn.commit()

@@ -62,6 +62,6 @@ async def lemmy_search(url: str, aio_session: ClientSession) -> tuple[int, dict[
         raise HTTPException(status_code=422, detail="Not a valid Lemmy URL or url doesn't start with https://")
 
     params = {"q": url, "auth": aio_session.headers["auth"]}
-    async with aio_session.get("https://lemmystats.lol/api/v3/resolve_object", params=params) as resp:
+    async with aio_session.get("http://localhost:24455/api/v3/resolve_object", params=params) as resp:
         search_result = await resp.json()
         return resp.status, search_result
