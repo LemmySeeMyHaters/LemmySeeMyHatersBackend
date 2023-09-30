@@ -27,7 +27,7 @@ async def redirect_to_docs() -> RedirectResponse:
 async def post_votes(
     url: HttpUrl = Query(..., description="URL of the post"),
     offset: int = Query(default=0, description="The offset from which to start paginating the data (0-based indexing)", ge=0),
-    limit: int = Query(default=50, description="The maximum number of items to return per page", ge=1, le=251),
+    limit: int = Query(default=50, description="The maximum number of items to return per page", ge=1, le=250),
     votes_filter: VoteFilter = Query(VoteFilter.ALL, description="Vote filter option (All, Upvotes, Downvotes)"),
     sort_by: SortOption = Query(SortOption.DATETIME_DESC, description="Sort option (datetime_asc, datetime_desc)"),
     username: Optional[str] = Query(None, description="Username to filter by vote author"),
@@ -69,7 +69,7 @@ async def post_votes(
 async def comment_votes(
     url: HttpUrl = Query(..., description="URL of the comment"),
     offset: int = Query(default=0, description="The offset from which to start paginating the data (0-based indexing)", ge=0),
-    limit: int = Query(default=50, description="The maximum number of items to return per page", ge=1, le=251),
+    limit: int = Query(default=50, description="The maximum number of items to return per page", ge=1, le=250),
     votes_filter: VoteFilter = Query(VoteFilter.ALL, description="Vote filter option (All, Upvotes, Downvotes)"),
     sort_by: SortOption = Query(SortOption.DATETIME_DESC, description="Sort option (datetime_asc, datetime_desc)"),
     username: Optional[str] = Query(None, description="Username to filter by vote author"),
