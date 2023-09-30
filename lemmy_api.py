@@ -17,9 +17,9 @@ async def lemmy_auth(aio_session: ClientSession) -> None:
 
     """
     auth = {"password": getenv("LEMMY_PASSWORD"), "totp_2fa_token": None, "username_or_email": getenv("LEMMY_USERNAME")}
-    async with aio_session.post("http://localhost:24455/api/v3/user/login", json=auth) as resp:
+    async with aio_session.post(f"{getenv('LOCAL_INSTANCE_URL')}/api/v3/user/login", json=auth) as resp:
         data = await resp.json()
-        aio_session.headers["auth"] = data.get("jwt")
+        aio_session.headers["Authorization"] = f"Bearer {data.get('jwt')}"
 
 
 async def is_valid_lemmy_url(url: str) -> bool:
@@ -61,7 +61,7 @@ async def lemmy_search(url: str, aio_session: ClientSession) -> tuple[int, dict[
     if not await is_valid_lemmy_url(url):
         raise HTTPException(status_code=422, detail="Not a valid Lemmy URL or url doesn't start with https://")
 
-    params = {"q": url, "auth": aio_session.headers["auth"]}
-    async with aio_session.get("http://localhost:24455/api/v3/resolve_object", params=params) as resp:
+    params = {"q": url}
+    async with aio_session.get(f"{getenv('LOCAL_INSTANCE_URL')}/api/v3/resolve_object", params=params) as resp:
         search_result = await resp.json()
         return resp.status, search_result
