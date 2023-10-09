@@ -165,14 +165,14 @@ async def get_votes_information(
         id_col=id_col,
     )
 
+    if username is not None:
+        votes_query += " AND pe.name = $2"
+
     if votes_filter != VoteFilter.ALL:
         votes_query += f" AND {1 if votes_filter == VoteFilter.UPVOTES else -1} = content_likes.score"
 
     order_by_clause = f" ORDER BY content_likes.published {'ASC' if sort_by == SortOption.DATETIME_ASC else 'DESC'}"
     votes_query += order_by_clause
-
-    if username is not None:
-        votes_query += " AND pe.name = $2"
 
     object_local_id = await get_local_id_from_ap_id(url, object_type, pg_conn)
     result = await asyncio.gather(get_aggregates_from_pg(agg_query, object_local_id), get_scores_from_pg(votes_query, object_local_id, username, pg_conn))
