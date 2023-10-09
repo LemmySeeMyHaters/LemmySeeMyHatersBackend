@@ -166,7 +166,7 @@ async def get_votes_information(
     )
 
     if username is not None:
-        votes_query += " AND pe.name = $2"
+        votes_query += " AND pe.name ILIKE $2"
 
     if votes_filter != VoteFilter.ALL:
         votes_query += f" AND {1 if votes_filter == VoteFilter.UPVOTES else -1} = content_likes.score"
