@@ -7,6 +7,7 @@ import asyncpg
 from aiohttp import ClientSession
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import HttpUrl
 
@@ -16,6 +17,10 @@ from lemmy_db import paginate_data, get_votes_information
 
 load_dotenv()
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+)
 
 
 @app.get("/")
